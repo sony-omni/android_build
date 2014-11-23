@@ -209,17 +209,29 @@ for change in args.change_number:
         if args.verbose:
             sys.stderr.write('The malformed response was: %s\n' % d)
         sys.exit(1)
-    # Enumerate through JSON response
-    for (i, data) in enumerate(data_array):
-        date_fluff       = '.000000000'
-        project_name     = data['project']
-        change_number    = data['_number']
-        current_revision = data['revisions'][data['current_revision']]
-        patch_number     = current_revision['_number']
-        # Backwards compatibility
-        if 'http' in current_revision['fetch']:
-            fetch_url        = current_revision['fetch']['http']['url']
-            fetch_ref        = current_revision['fetch']['http']['ref']
+
+    # Extract information from the JSON response
+    date_fluff       = '.000000000'
+    project_name     = data['project']
+    project_branch   = data['branch']
+    change_number    = data['_number']
+    status           = data['status']
+    current_revision = data['revisions'][data['current_revision']]
+    patch_number     = current_revision['_number']
+    fetch_url        = current_revision['fetch']['anonymous http']['url']
+    fetch_ref        = current_revision['fetch']['anonymous http']['ref']
+    author_name      = current_revision['commit']['author']['name']
+    author_email     = current_revision['commit']['author']['email']
+    author_date      = current_revision['commit']['author']['date'].replace(date_fluff, '')
+    committer_name   = current_revision['commit']['committer']['name']
+    committer_email  = current_revision['commit']['committer']['email']
+    committer_date   = current_revision['commit']['committer']['date'].replace(date_fluff, '')
+    subject          = current_revision['commit']['subject']
+
+    # Check if commit has already been merged and exit if it has, unless -f is specified
+    if status == "MERGED":
+        if args.force:
+            print("!! Force-picking a merged commit !!\n")
         else:
             fetch_url        = current_revision['fetch']['anonymous http']['url']
             fetch_ref        = current_revision['fetch']['anonymous http']['ref']
@@ -242,10 +254,42 @@ for change in args.change_number:
             sys.stderr.write('ERROR: For %d, could not determine the project path for project %s\n' % (change_number, project_name))
             continue;
 
-        # If --start-branch is given, create the branch (more than once per path is okay; repo ignores gracefully)
-        if args.start_branch:
-            cmd = '%s start %s %s' % (repo_bin, args.start_branch[0], project_path)
-            execute_cmd(cmd)
+    # Convert the project name to a project path
+    #   - check that the project path exists
+    if project_name in project_name_to_path:
+        project_path = project_name_to_path[project_name];
+
+        if project_path.startswith('hardware/qcom/'):
+            split_path = project_path.split('/')
+            # split_path[2] might be display or it might be display-caf, trim the -caf
+            split_path[2] = split_path[2].split('-')[0]
+
+            # Need to treat hardware/qcom/{audio,display,media} specially
+            if split_path[2] == 'audio' or split_path[2] == 'display' or split_path[2] == 'media':
+                split_branch = project_branch.split('-')
+
+                # display is extra special
+                if split_path[2] == 'display' and len(split_path) == 3:
+                    project_path = '/'.join(split_path)
+                else:
+                    project_path = '/'.join(split_path[:-1])
+
+                if len(split_branch) == 4 and split_branch[0] == 'cm' and split_branch[2] == 'caf':
+                    project_path += '-caf/msm' + split_branch[3]
+                # audio and media are different from display
+                elif split_path[2] == 'audio' or split_path[2] == 'media':
+                    project_path += '/default'
+    elif args.ignore_missing:
+        print('WARNING: Skipping %d since there is no project directory for: %s\n' % (change_number, project_name))
+        continue;
+    else:
+        sys.stderr.write('ERROR: For %d, could not determine the project path for project %s\n' % (change_number, project_name))
+        sys.exit(1)
+
+    # If --start-branch is given, create the branch (more than once per path is okay; repo ignores gracefully)
+    if args.start_branch:
+        cmd = '%s start %s %s' % (repo_bin, args.start_branch[0], project_path)
+        execute_cmd(cmd)
 
         # Print out some useful info
         if not args.quiet:
