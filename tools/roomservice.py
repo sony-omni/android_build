@@ -39,11 +39,11 @@ default_rem = "github"
 default_rev = "android-5.0"
 # set this to the remote that you use for projects from your team repos
 # example fetch="https://github.com/omnirom"
-default_team_rem = "android-legacy"
+default_team_rem = "sony-omni"
 # this shouldn't change unless google makes changes
 local_manifest_dir = ".repo/local_manifests"
 # change this to your name on github (or equivalent hosting)
-android_team = "android-legacy"
+android_team = "sony-omni"
 
 
 def check_repo_exists(git_data):
